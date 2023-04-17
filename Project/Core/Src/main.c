@@ -42,6 +42,9 @@
 CAN_HandleTypeDef hcan2;
 
 /* USER CODE BEGIN PV */
+CAN_TxHeaderTypeDef   TxHeader;
+uint8_t               TxData[8];
+uint32_t              TxMailbox;
 
 /* USER CODE END PV */
 
@@ -65,7 +68,7 @@ static void MX_CAN2_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+	__HAL_RCC_CAN2_CLK_ENABLE();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -88,15 +91,22 @@ int main(void)
   MX_GPIO_Init();
   MX_CAN2_Init();
   /* USER CODE BEGIN 2 */
-
+  TxData[0]=0xFF;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15);
-	  HAL_Delay(1000);
+	  /* Start the Transmission process */
+	  if (HAL_CAN_AddTxMessage(&hcan2, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+	  {
+		/* Transmission request Error */
+		  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_14|GPIO_PIN_15);
+		//Error_Handler();
+	  }
+	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12|GPIO_PIN_13);
+	  HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -154,18 +164,25 @@ static void MX_CAN2_Init(void)
 {
 
   /* USER CODE BEGIN CAN2_Init 0 */
-
+	CAN_FilterTypeDef  sFilterConfig;
   /* USER CODE END CAN2_Init 0 */
 
   /* USER CODE BEGIN CAN2_Init 1 */
-
+	// Configure the GPIO pins for CAN1
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	GPIO_InitStruct.Pin = GPIO_PIN_13 | GPIO_PIN_12;
+	GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+	GPIO_InitStruct.Alternate = GPIO_AF9_CAN1;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
   /* USER CODE END CAN2_Init 1 */
   hcan2.Instance = CAN2;
-  hcan2.Init.Prescaler = 16;
+  hcan2.Init.Prescaler = 20;
   hcan2.Init.Mode = CAN_MODE_NORMAL;
   hcan2.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan2.Init.TimeSeg1 = CAN_BS1_1TQ;
-  hcan2.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan2.Init.TimeSeg1 = CAN_BS1_3TQ;
+  hcan2.Init.TimeSeg2 = CAN_BS2_3TQ;
   hcan2.Init.TimeTriggeredMode = DISABLE;
   hcan2.Init.AutoBusOff = DISABLE;
   hcan2.Init.AutoWakeUp = DISABLE;
@@ -177,7 +194,38 @@ static void MX_CAN2_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN CAN2_Init 2 */
+  HAL_Delay(100);
+  /*##-2- Configure the CAN Filter ###########################################*/
+  sFilterConfig.FilterBank = 0;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  sFilterConfig.FilterIdHigh = 0x0000;
+  sFilterConfig.FilterIdLow = 0x0000;
+  sFilterConfig.FilterMaskIdHigh = 0x0000;
+  sFilterConfig.FilterMaskIdLow = 0x0000;
+  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  sFilterConfig.FilterActivation = ENABLE;
+  sFilterConfig.SlaveStartFilterBank = 14;
 
+  if (HAL_CAN_ConfigFilter(&hcan2, &sFilterConfig) != HAL_OK)
+  {
+    /* Filter configuration Error */
+    Error_Handler();
+  }
+  /*##-3- Start the CAN peripheral ###########################################*/
+   if (HAL_CAN_Start(&hcan2) != HAL_OK)
+   {
+     /* Start Error */
+	   HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_14);
+     //Error_Handler();
+   }
+  //Configure transmission process
+  TxHeader.StdId = 0x321;
+  TxHeader.ExtId = 0x01;
+  TxHeader.RTR = CAN_RTR_DATA;
+  TxHeader.IDE = CAN_ID_STD;
+  TxHeader.DLC = 2;
+  TxHeader.TransmitGlobalTime = DISABLE;
   /* USER CODE END CAN2_Init 2 */
 
 }
