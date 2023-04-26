@@ -39,6 +39,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 CAN_HandleTypeDef hcan2;
 
 /* USER CODE BEGIN PV */
@@ -46,13 +48,16 @@ CAN_TxHeaderTypeDef   TxHeader;
 uint8_t               TxData[8];
 uint32_t              TxMailbox;
 
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_CAN2_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
+
 
 /* USER CODE END PFP */
 
@@ -69,6 +74,7 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 	__HAL_RCC_CAN2_CLK_ENABLE();
+	TxData[0] = 0xFF;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -77,7 +83,6 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -90,14 +95,30 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_CAN2_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-  TxData[0]=0xFF;
+  uint32_t ADC_Value;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  HAL_ADC_Start(&hadc1); // start A/D conversion
+	  if(HAL_ADC_PollForConversion(&hadc1, 5) == HAL_OK) //check if conversion is completed
+	  {
+		  ADC_Value  = HAL_ADC_GetValue(&hadc1); // read digital value and save it inside uint32_t variable
+
+		  TxData[0] = (ADC_Value & 0x000000ff);
+		  TxData[1] = (ADC_Value & 0x0000ff00) >> 8;
+		  TxData[2] = (ADC_Value & 0x00ff0000) >> 16;
+		  TxData[3] = (ADC_Value & 0xff000000) >> 24;
+
+		  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_15);
+	}
+		HAL_ADC_Stop(&hadc1); // stop conversion
+		HAL_Delay(200);
+
 	  /* Start the Transmission process */
 	  if (HAL_CAN_AddTxMessage(&hcan2, &TxHeader, TxData, &TxMailbox) != HAL_OK)
 	  {
@@ -106,7 +127,7 @@ int main(void)
 		//Error_Handler();
 	  }
 	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12|GPIO_PIN_13);
-	  HAL_Delay(10);
+	  HAL_Delay(69);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -153,6 +174,58 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
@@ -224,7 +297,7 @@ static void MX_CAN2_Init(void)
   TxHeader.ExtId = 0x01;
   TxHeader.RTR = CAN_RTR_DATA;
   TxHeader.IDE = CAN_ID_STD;
-  TxHeader.DLC = 2;
+  TxHeader.DLC = 5;
   TxHeader.TransmitGlobalTime = DISABLE;
   /* USER CODE END CAN2_Init 2 */
 
@@ -240,6 +313,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
@@ -256,6 +330,9 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+/* Configure and initialize PA0 pin as analog input pin for A/D conversion */
+
+
 
 /* USER CODE END 4 */
 
