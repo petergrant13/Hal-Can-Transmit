@@ -74,7 +74,6 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 	__HAL_RCC_CAN2_CLK_ENABLE();
-	TxData[0] = 0xFF;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -98,6 +97,9 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   uint32_t ADC_Value;
+  uint32_t ADC_percentage;
+  uint32_t max_motor_speed = 3277;
+  uint32_t desired_motor_speed;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -107,15 +109,30 @@ int main(void)
 	  HAL_ADC_Start(&hadc1); // start A/D conversion
 	  if(HAL_ADC_PollForConversion(&hadc1, 5) == HAL_OK) //check if conversion is completed
 	  {
+		  // taking ADC data and turning it into a CAN message to spin the motor at a certain speed
 		  ADC_Value  = HAL_ADC_GetValue(&hadc1); // read digital value and save it inside uint32_t variable
+		  ADC_percentage = (ADC_Value*100)/(0xFFF);
+		  desired_motor_speed = (ADC_percentage*max_motor_speed)/100;
 
-		  TxData[0] = (ADC_Value & 0x000000ff);
-		  TxData[1] = (ADC_Value & 0x0000ff00) >> 8;
-		  TxData[2] = (ADC_Value & 0x00ff0000) >> 16;
-		  TxData[3] = (ADC_Value & 0xff000000) >> 24;
+		  TxData[0] = 0x31; // register address
+		  TxData[1] = desired_motor_speed & 0b0000000011111111; // last 8 bits of data
+		  TxData[2] = (desired_motor_speed & 0b1111111100000000) >> 8; // first 8 bits of data
 
+		  // test code to check data transmission
+		  /*
+		  TxData[0] = 0x31; // register address
+		  TxData[1] = 0xCD; // last 8 bits of data
+		  TxData[2] = 0x0C; // first 8 bits of data
+		  HAL_Delay(1000);
+		  TxData[0] = 0x31; // register address
+		  TxData[1] = 0x00; // last 8 bits of data
+		  TxData[2] = 0x00; // first 8 bits of data
+		  HAL_Delay(1000);
+		  */
+
+		  // CAN message: 201 31 Tx[0] Tx[1] Tx[2]
 		  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_15);
-	}
+	  }
 		HAL_ADC_Stop(&hadc1); // stop conversion
 		HAL_Delay(200);
 
@@ -251,11 +268,11 @@ static void MX_CAN2_Init(void)
 	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
   /* USER CODE END CAN2_Init 1 */
   hcan2.Instance = CAN2;
-  hcan2.Init.Prescaler = 20;
+  hcan2.Init.Prescaler = 2;
   hcan2.Init.Mode = CAN_MODE_NORMAL;
   hcan2.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan2.Init.TimeSeg1 = CAN_BS1_3TQ;
-  hcan2.Init.TimeSeg2 = CAN_BS2_3TQ;
+  hcan2.Init.TimeSeg1 = CAN_BS1_13TQ;
+  hcan2.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan2.Init.TimeTriggeredMode = DISABLE;
   hcan2.Init.AutoBusOff = DISABLE;
   hcan2.Init.AutoWakeUp = DISABLE;
@@ -293,11 +310,11 @@ static void MX_CAN2_Init(void)
      //Error_Handler();
    }
   //Configure transmission process
-  TxHeader.StdId = 0x321;
+  TxHeader.StdId = 0x201;
   TxHeader.ExtId = 0x01;
   TxHeader.RTR = CAN_RTR_DATA;
   TxHeader.IDE = CAN_ID_STD;
-  TxHeader.DLC = 5;
+  TxHeader.DLC = 3;
   TxHeader.TransmitGlobalTime = DISABLE;
   /* USER CODE END CAN2_Init 2 */
 
